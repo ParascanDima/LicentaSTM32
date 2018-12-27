@@ -1,0 +1,9 @@
+
+.* 
+!.gitignore 
+*/ 
+!Src/ 
+!Inc/ 
+*.cfg 
+*.xml 
+*.ld 
