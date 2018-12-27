@@ -25,6 +25,7 @@
 
 static GSM_STATE eGsmState = enIDLE;
 static GSM_GPRS_STATE eGprsState = enPDPdeactivated;
+static GSM_COMM_STATE eGsmCommState = enCommIdle;
 
 /**************Public Variable Definitions***************/
 
@@ -39,6 +40,10 @@ void Set_eGsmState(GSM_STATE state){
 
 void Set_eGprsState(GSM_GPRS_STATE state){
     eGprsState = state;
+}
+
+void Set_eGsmCommState(GSM_COMM_STATE state){
+	eGsmCommState = state;
 }
 
 void hardGsmReset(void){
@@ -75,6 +80,10 @@ GSM_STATE Get_eGsmState(void){
 
 GSM_GPRS_STATE Get_eGPRSState(void){
     return eGprsState;
+}
+
+GSM_COMM_STATE Get_eGsmCommState(void){
+    return eGsmCommState;
 }
 
 uint8_t GSM_ReceiveAtCommandResponse(uint16_t timeout, uint8_t* expectedResponse, uint8_t isStateChanging, uint8_t state, uint8_t isRspNeeded){
@@ -220,57 +229,62 @@ GsmHttp_Response GSM_GetHTTPResponseCode(uint8_t method){
 GSM_GPRS_STATE GSM_GetSimGprsState(void){
 
     uint8_t tRsp;
-    GSM_GPRS_STATE state = enUnreachable;
+    GSM_GPRS_STATE state = enPDPdeactivated;
     uint8_t expectedRsp[25] = "STATUS:";
     uint8_t expectedRspIndex = 0;
 
     uint8_t * buffer = gsmGet_Response();
 
-    tRsp = GSM_ReceiveAtCommandResponse(HTTP_METHOD_TIMEOUT, expectedRsp, GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_RESPONSE_SAVE_NEEDED);
+    tRsp = GSM_ReceiveAtCommandResponse(1000, expectedRsp, GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_RESPONSE_SAVE_NEEDED);
     if(tRsp == GSM_OK){
         expectedRspIndex = (uint8_t)((uint8_t*)strstr((const char*)buffer, (const char*)expectedRsp) - buffer);
         while(!gsmCompleteResponseReceived(&buffer[expectedRspIndex]));
-        if(gsmCompareResponseWith("IP INITIAL"))
+        if(gsmCompareResponseWith((uint8_t*)"IP INITIAL"))
         {
         	state = enIPInitial;
         }
-        else if(gsmCompareResponseWith("IP START"))
+        else if(gsmCompareResponseWith((uint8_t*)"IP START"))
         {
         	state = enIPstart;
         }
-        else if(gsmCompareResponseWith("IP CONFIG"))
+        else if(gsmCompareResponseWith((uint8_t*)"IP CONFIG"))
         {
         	state = enIPConfig;
         }
-        else if(gsmCompareResponseWith("IP GPRSACT"))
+        else if(gsmCompareResponseWith((uint8_t*)"IP GPRSACT"))
         {
         	state = enIPGprsAct;
         }
-        else if(gsmCompareResponseWith("IP STATUS"))
+        else if(gsmCompareResponseWith((uint8_t*)"IP STATUS"))
         {
         	state = enIPprocessing;
         }
-        else if(gsmCompareResponseWith("TCP CONNECTING"))
+        else if(gsmCompareResponseWith((uint8_t*)"TCP CONNECTING"))
         {
         	state = enIPprocessing;
         }
-        else if(gsmCompareResponseWith("CONNECT OK"))
+        else if(gsmCompareResponseWith((uint8_t*)"CONNECT OK"))
         {
         	state = enIPprocessing;
         }
-        else if(gsmCompareResponseWith("TCP CLOSING"))
+        else if(gsmCompareResponseWith((uint8_t*)"TCP CLOSING"))
         {
         	state = enTcpClosing;
         }
-        else if(gsmCompareResponseWith("TCP CLOSED"))
+        else if(gsmCompareResponseWith((uint8_t*)"TCP CLOSED"))
         {
         	state = enTcpClosed;
         }
-        else if(gsmCompareResponseWith("PDP DEACT"))
+        else if(gsmCompareResponseWith((uint8_t*)"PDP DEACT"))
+        {
+        	state = enPDPdeactivated;
+        }
+        else
         {
         	state = enPDPdeactivated;
         }
         gsmResponseBufferReset();
+        Set_eGprsState(state);
     }
 
     return state;
@@ -279,138 +293,221 @@ GSM_GPRS_STATE GSM_GetSimGprsState(void){
 
 uint8_t CheckGsmPersistance(void){
 
+	uint8_t retVal;
+
+	Set_eGsmCommState(enCommBusy);
     gsmTransmit((uint8_t*)"AT\r\n");
 
-    return GSM_ReceiveAtCommandResponse(50, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(50, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_SetBaudRate(uint16_t baud){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_IPR(baud);
 
-    return GSM_ReceiveAtCommandResponse(200, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(200, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_PowerDown(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CPOWD();
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GSM_STATE_CHANGES, (uint8_t)enIDLE, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GSM_STATE_CHANGES, (uint8_t)enIDLE, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_EnterPinCode(uint16_t pinCode){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CPIN(pinCode);
 
-    return GSM_ReceiveAtCommandResponse(200, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(200, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_CallNumber(uint8_t* phoneNumber){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmATD(phoneNumber);
 
     Set_eGsmState(enCalling);
 
-    return GSM_ReceiveCallResponse();
+    retVal = GSM_ReceiveCallResponse();
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_AttachToGPRS(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CGATT(1);
 
-    return GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPInitial, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPInitial, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_DetachToGPRS(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CGATT(0);
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enPDPdeactivated, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enPDPdeactivated, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_SetupAPN(uint8_t* apn){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CSTT(apn);
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPstart, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPstart, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_GprsSingleConnectionMode(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CIPMUX(0);
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_StartGPRS(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CIICR();
 
-    return GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPConfig, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPConfig, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_GetLocalIP(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CIFSR();
 
-    return GSM_ReceiveAtCommandResponse(5000, (uint8_t*)"10.12.", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPStatus, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(5000, (uint8_t*)"10.12.", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPStatus, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_GprsShutDown(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_CIPSHUT();
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"SHUT OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enPDPdeactivated, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"SHUT OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enPDPdeactivated, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
+}
+
+
+uint8_t GSM_TcpSendMode(void){
+	uint8_t retVal;
+
+	Set_eGsmCommState(enCommBusy);
+    gsmAT_CIPQSEND(0);
+
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_ConnectToServer(uint8_t* host, uint8_t* port){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
 	Set_eGprsState(enIPprocessing);
     gsmAT_CIPSTART(host, port);
 
-    return GSM_ReceiveAtCommandResponse(4000, (uint8_t*)"CONNECT OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enConnectOk, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(4000, (uint8_t*)"CONNECT OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enConnectOk, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
-//uint8_t GSM_TcpSend(uint8_t* data){
-//
-//    gsmAT_CIPSEND(data);
-//
-//
-//}
+uint8_t GSM_TcpSend(uint8_t* data, uint16_t dataLength){
+	uint8_t retVal;
+
+    Set_eGsmCommState(enCommBusy);
+    gsmAT_CIPSEND(dataLength);
+
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    if (retVal == GSM_OK)
+    {
+        gsmTcpSendData(data);
+        retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"SEND OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    }
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
+}
 
 
 uint8_t GSM_InitHTTP(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_HTTPINIT();
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_SetHttpParameters(uint8_t HTTPParamTag, uint8_t* HTTPParmValue){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_HTTPPARA(HTTPParamTag, HTTPParmValue);
 
-    return GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_SetHTTPDataToTransfer(uint8_t* postData, uint16_t nrOfBytes, uint16_t latencyTime){
     uint8_t tRsp = GSM_ERROR;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_HTTPDATA(nrOfBytes, latencyTime);
 
     tRsp = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"DOWNLOAD", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
@@ -418,39 +515,56 @@ uint8_t GSM_SetHTTPDataToTransfer(uint8_t* postData, uint16_t nrOfBytes, uint16_
         gsmHttpSendData(postData);
         tRsp = GSM_ReceiveAtCommandResponse(latencyTime, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
     }
-
+    Set_eGsmCommState(enCommIdle);
     return tRsp;
 }
 
 
 uint8_t GSM_SetBearerParameters( uint8_t* ConParamTag, uint8_t* ConParamValue){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_SAPBR(3, 1, ConParamTag, ConParamValue);
 
-    return GSM_ReceiveAtCommandResponse(500, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(500, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_OpenBearer(void){
+	uint8_t retVal;
+
+	Set_eGsmCommState(enCommBusy);
     gsmAT_SAPBR(1, 1, NULL, NULL);
 
-    return GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPStatus, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(6000, (uint8_t*)"OK", GSM_GPRS_STATE_CHANGES, (uint8_t)enIPStatus, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_HttpMethodAction(uint8_t method){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_HTTPACTION(method);
 
-    return GSM_GetHTTPResponseCode(method);
+    retVal = GSM_GetHTTPResponseCode(method);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
 uint8_t GSM_HTTPTerminateService(void){
+	uint8_t retVal;
 
+	Set_eGsmCommState(enCommBusy);
     gsmAT_HTTPTERM();
 
-    return GSM_ReceiveAtCommandResponse(3000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(3000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    Set_eGsmCommState(enCommIdle);
+    return retVal;
 }
 
 
@@ -675,7 +789,10 @@ uint8_t GSM_StartServerConnection(uint8_t* host, uint8_t* port){
 
 void GSM_StopGprsConnection(void){
     if(enConnectOk == Get_eGPRSState())
+    {
     	Set_eGprsState(enTcpClosing);
         GSM_GprsShutDown();
+    }
+
 }
 

@@ -149,6 +149,12 @@ typedef enum{
 }GSM_GPRS_STATE;
 
 
+typedef enum
+{
+	enCommIdle = 0,
+	enCommBusy
+}GSM_COMM_STATE;
+
 
 typedef uint16_t GsmHttp_Response;
 
@@ -192,6 +198,7 @@ void GSM_ActivateGprs(void);
 
 GSM_STATE      Get_eGsmState(void);
 GSM_GPRS_STATE Get_eGPRSState(void);
+GSM_COMM_STATE Get_eGsmCommState(void);
 
 GsmHttp_Response GSM_HttpPost(uint8_t* urlPath, uint8_t* postData);
 GsmHttp_Response GSM_HttpGet(uint8_t* urlPath);

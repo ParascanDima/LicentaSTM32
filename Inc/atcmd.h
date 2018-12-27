@@ -51,6 +51,10 @@ void gsmAT_CIPSTART        (uint8_t* host, uint8_t* port);
 
 void gsmAT_CIPSHUT         (void);
 
+void gsmAT_CIPQSEND        (uint8_t mode);
+
+void gsmAT_CIPSEND         (uint16_t length);
+
 void gsmAT_HTTPINIT        (void);
 
 void gsmAT_HTTPPARA        (uint8_t HTTPParamTag, uint8_t* HTTPParmValue);

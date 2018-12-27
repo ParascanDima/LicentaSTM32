@@ -16,6 +16,7 @@
 /***************************Public Macro Definitions********************************/
 
 #define gsmHttpSendData(data)   gsmTransmit(data)
+#define gsmTcpSendData(data)    gsmTransmit(data)
 #define gsmCompareMessageWith   gsmCompareResponseWith
 
 /***************************Public Type Definitions********************************/

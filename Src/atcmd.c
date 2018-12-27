@@ -101,6 +101,33 @@ void gsmAT_CIPSTART(uint8_t* host, uint8_t* port)
 }
 
 
+void gsmAT_CIPQSEND(uint8_t mode)
+{
+	uint8_t buffer[18] = "AT+CIPQSEND=";
+	uint8_t modeStr[3] = "";
+
+	CustomIntToString(mode, modeStr);
+
+	(void)strcat((char*)buffer, (char*)modeStr);
+	(void)strcat((char*)buffer, "\r\n");
+	gsmTransmit(buffer);
+}
+
+
+
+void gsmAT_CIPSEND(uint16_t length)
+{
+	uint8_t buffer[19] = "AT+CIPSEND=";
+	uint8_t lengthStr[5] = "";
+
+	CustomIntToString(length, lengthStr);
+
+	(void)strcat((char*)buffer, (char*)lengthStr);
+	(void)strcat((char*)buffer, "\r\n");
+	gsmTransmit(buffer);
+}
+
+
 void gsmAT_CIPSHUT(void){
     gsmTransmit((uint8_t*)"AT+CIPSHUT\r\n");
 }
