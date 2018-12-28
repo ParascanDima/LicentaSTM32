@@ -55,12 +55,14 @@
 #include "lgdp4524.h"
 #include "GSM.h"
 #include "mrf24j40.h"
+#include "tim.h"
 /* USER CODE END Includes */
 
 /* Variables -----------------------------------------------------------------*/
 osThreadId defaultTaskHandle;
 osThreadId myTask02Handle;
 osThreadId myTask03Handle;
+osThreadId myTask04Handle;
 osSemaphoreId zigbeeSemaHandle;
 osSemaphoreId gsmSemaHandle;
 
@@ -72,6 +74,7 @@ osSemaphoreId gsmSemaHandle;
 void StartDefaultTask(void const * argument);
 void ZigBeeTask(void const * argument);
 void GsmTask(void const * argument);
+void DisplayTask(void const * argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -122,6 +125,10 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(myTask03, GsmTask, osPriorityNormal, 0, 128);
   myTask03Handle = osThreadCreate(osThread(myTask03), NULL);
 
+  /* definition and creation of myTask04 */
+  osThreadDef(myTask04, DisplayTask, osPriorityIdle, 0, 128);
+  myTask04Handle = osThreadCreate(osThread(myTask04), NULL);
+
   /* USER CODE BEGIN RTOS_THREADS */
 	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -136,65 +143,11 @@ void StartDefaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN StartDefaultTask */
-	ZigBeeStateType zigbeeState = MRF24J40_GetState();
-	uint8_t* zigbeeStateStr[2] = {(uint8_t*)"UNINITIALIZED", (uint8_t*)"INITIALIZED"};
 
-	uint8_t gsmState = Get_eGsmState();
-	uint8_t* gsmStateStr[8] = {(uint8_t*)"enIDLE", (uint8_t*)"enRDY", (uint8_t*)"enCallReady", (uint8_t*)"enOK", (uint8_t*)"enReset",
-			(uint8_t*)"enCalling", (uint8_t*)"enNoSIM", (uint8_t*)"enUnreachable"};
-
-	uint8_t gsmGprsState = Get_eGPRSState();
-	uint8_t* gsmGprsStateStr[10] = {(uint8_t*)"enIPInitial", (uint8_t*)"enIPstart", (uint8_t*)"enIPConfig", (uint8_t*)"enIPGprsAct",
-			(uint8_t*)"enIPStatus", (uint8_t*)"enIPprocessing", (uint8_t*)"enConnectOk", (uint8_t*)"enTcpClosing",
-			(uint8_t*)"enTcpClosed", (uint8_t*)"enPDPdeactivated"};
-
-	HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_RESET);
-	osDelay(10);
-
-	HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_SET);
-	osDelay(10);
-	LCD_LGDP4524_Init(enLandscape);
-	SetFont((uint8_t*)SmallFont);
-
-	ClrScr();
-	FillScr(255, 255, 255);
-	SetBrushColor(0, 0, 0);
-	SetBackColor(255, 255, 255, 255);
-	Print((uint8_t*)"ZIGBEE STATE:", LEFT, 50, 0);
-	Print((uint8_t*)"GSM STATE:", LEFT, 90, 0);
-	Print((uint8_t*)"GPRS STATE:", LEFT, 105, 0);
-
-	Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
-	Print(gsmStateStr[gsmState], 80, 90, 0);
-	Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
 	/* Infinite loop */
 	for(;;)
 	{
-		if (zigbeeState != MRF24J40_GetState())
-		{
-			SetBrushColor(255, 255, 255);
-			Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
-			zigbeeState = MRF24J40_GetState();
-			SetBrushColor(0, 0, 0);
-			Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
-		}
-		if (gsmState != Get_eGsmState())
-		{
-			SetBrushColor(255, 255, 255);
-			Print(gsmStateStr[gsmState], 80, 90, 0);
-			gsmState = Get_eGsmState();
-			SetBrushColor(0, 0, 0);
-			Print(gsmStateStr[gsmState], 80, 90, 0);
-		}
-		if (gsmGprsState != Get_eGPRSState())
-		{
-			SetBrushColor(255, 255, 255);
-			Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
-			gsmGprsState = Get_eGPRSState();
-			SetBrushColor(0, 0, 0);
-			Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
-		}
-		osDelay(50);
+		osDelay(1);
 	}
   /* USER CODE END StartDefaultTask */
 }
@@ -226,6 +179,7 @@ void GsmTask(void const * argument)
 	GSM_Init();
 	if (GSM_HttpGet((uint8_t*)"217.26.174.207:350/saveip/") == GSM_HTTP_RESPONSE_OK){
 	            GSM_StartServerConnection(SERVER_HOST, SERVER_CONNECTION_PORT);
+	            HAL_TIM_Base_Start_IT(&htim6);
 	        }
 	for(;;)
 	{
@@ -264,8 +218,83 @@ void GsmTask(void const * argument)
   /* USER CODE END GsmTask */
 }
 
-/* USER CODE BEGIN Application */
+/* DisplayTask function */
+void DisplayTask(void const * argument)
+{
+  /* USER CODE BEGIN DisplayTask */
+	ZigBeeStateType zigbeeState = MRF24J40_GetState();
+	uint8_t* zigbeeStateStr[2] = {(uint8_t*)"UNINITIALIZED", (uint8_t*)"INITIALIZED"};
 
+	uint8_t gsmState = Get_eGsmState();
+	uint8_t* gsmStateStr[8] = {(uint8_t*)"enIDLE", (uint8_t*)"enRDY", (uint8_t*)"enCallReady", (uint8_t*)"enOK", (uint8_t*)"enReset",
+			(uint8_t*)"enCalling", (uint8_t*)"enNoSIM", (uint8_t*)"enUnreachable"};
+
+	uint8_t gsmGprsState = Get_eGPRSState();
+	uint8_t* gsmGprsStateStr[10] = {(uint8_t*)"enIPInitial", (uint8_t*)"enIPstart", (uint8_t*)"enIPConfig", (uint8_t*)"enIPGprsAct",
+			(uint8_t*)"enIPStatus", (uint8_t*)"enIPprocessing", (uint8_t*)"enConnectOk", (uint8_t*)"enTcpClosing",
+			(uint8_t*)"enTcpClosed", (uint8_t*)"enPDPdeactivated"};
+
+	HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_RESET);
+	osDelay(10);
+
+	HAL_GPIO_WritePin(RST_GPIO_Port, RST_Pin, GPIO_PIN_SET);
+	osDelay(10);
+	LCD_LGDP4524_Init(enLandscape);
+	SetFont((uint8_t*)SmallFont);
+
+	ClrScr();
+	FillScr(255, 255, 255);
+	SetBrushColor(0, 0, 0);
+	SetBackColor(255, 255, 255, 255);
+	Print((uint8_t*)"ZIGBEE STATE:", LEFT, 50, 0);
+	Print((uint8_t*)"GSM STATE:", LEFT, 90, 0);
+	Print((uint8_t*)"GPRS STATE:", LEFT, 105, 0);
+
+	Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
+	Print(gsmStateStr[gsmState], 80, 90, 0);
+	Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
+  /* Infinite loop */
+  for(;;)
+  {
+	  if (zigbeeState != MRF24J40_GetState())
+	  {
+			SetBrushColor(255, 255, 255);
+			Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
+			zigbeeState = MRF24J40_GetState();
+			SetBrushColor(0, 0, 0);
+			Print(zigbeeStateStr[zigbeeState], 104, 50, 0);
+		}
+		if (gsmState != Get_eGsmState())
+		{
+			SetBrushColor(255, 255, 255);
+			Print(gsmStateStr[gsmState], 80, 90, 0);
+			gsmState = Get_eGsmState();
+			SetBrushColor(0, 0, 0);
+			Print(gsmStateStr[gsmState], 80, 90, 0);
+		}
+		if (gsmGprsState != Get_eGPRSState())
+		{
+			SetBrushColor(255, 255, 255);
+			Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
+			gsmGprsState = Get_eGPRSState();
+			SetBrushColor(0, 0, 0);
+			Print(gsmGprsStateStr[gsmGprsState], 88, 105, 0);
+		}
+		osDelay(50);
+  }
+  /* USER CODE END DisplayTask */
+}
+
+/* USER CODE BEGIN Application */
+void ServerBeaconTransmit(void)
+{
+	uint8_t beacon[5] = "Here\r";
+	if (enConnectOk == Get_eGPRSState())
+	{
+//		while (enCommBusy == Get_eGsmCommState());
+		GSM_TcpSend(beacon, 5);
+	}
+}
 /* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -438,11 +438,11 @@ uint8_t GSM_GprsShutDown(void){
 }
 
 
-uint8_t GSM_TcpSendMode(void){
+uint8_t GSM_TcpSendMode(uint8_t mode){
 	uint8_t retVal;
 
 	Set_eGsmCommState(enCommBusy);
-    gsmAT_CIPQSEND(0);
+    gsmAT_CIPQSEND(mode);
 
     retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
     Set_eGsmCommState(enCommIdle);
@@ -766,7 +766,7 @@ uint8_t GSM_StartServerConnection(uint8_t* host, uint8_t* port){
 
     if(enIPStatus == Get_eGPRSState())
     {
-        while ( enIPprocessing != Get_eGPRSState() )
+        while ( enConnectOk != Get_eGPRSState() )
         {
             if (tries == MAX_TRIES){
                 Set_eGprsState(enPDPdeactivated);
@@ -775,7 +775,7 @@ uint8_t GSM_StartServerConnection(uint8_t* host, uint8_t* port){
                 }
                 break;
             }
-
+            (void)GSM_TcpSendMode(0);
             resp = GSM_ConnectToServer(host, port);
 
             if (resp != GSM_OK){

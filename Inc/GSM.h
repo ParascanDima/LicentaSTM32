@@ -186,6 +186,7 @@ uint8_t GSM_HttpMethodAction(uint8_t method);
 uint8_t GSM_HTTPTerminateService(void);
 uint8_t GSM_ReceiveCallResponse(void);
 uint8_t GSM_StartServerConnection(uint8_t* host, uint8_t* port);
+uint8_t GSM_TcpSend(uint8_t* data, uint16_t dataLength);
 GSM_GPRS_STATE GSM_GetSimGprsState(void);
 
 

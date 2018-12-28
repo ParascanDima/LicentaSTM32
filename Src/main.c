@@ -51,6 +51,7 @@
 #include "stm32f4xx_hal.h"
 #include "cmsis_os.h"
 #include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 #include "fsmc.h"
@@ -69,6 +70,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
+extern void ServerBeaconTransmit(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -117,8 +119,8 @@ int main(void)
   MX_SPI1_Init();
   MX_FSMC_Init();
   MX_USART6_UART_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  //HAL_TIM_Base_Start_IT(&htim6);
 
   /* USER CODE END 2 */
 
@@ -204,13 +206,7 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-//{
-//	if (GPIO_Pin == GPIO_PIN_0)
-//	{
-//		MRF24J40_EventHandler();
-//	}
-//}
+
 /* USER CODE END 4 */
 
 /**
@@ -230,7 +226,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+  if (htim->Instance == TIM6)
+  {
+	  ServerBeaconTransmit();
+  }
   /* USER CODE END Callback 1 */
 }
 
