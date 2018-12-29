@@ -469,7 +469,7 @@ uint8_t GSM_TcpSend(uint8_t* data, uint16_t dataLength){
     Set_eGsmCommState(enCommBusy);
     gsmAT_CIPSEND(dataLength);
 
-    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)"OK", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
+    retVal = GSM_ReceiveAtCommandResponse(1000, (uint8_t*)">", GSM_NO_STATE_CHANGES, GSM_NO_STATE_CHANGES, GSM_NO_RESPONSE_SAVE_NEEDED);
     if (retVal == GSM_OK)
     {
         gsmTcpSendData(data);

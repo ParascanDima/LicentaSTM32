@@ -55,7 +55,8 @@
 #include "lgdp4524.h"
 #include "GSM.h"
 #include "mrf24j40.h"
-#include "tim.h"
+#include <string.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Variables -----------------------------------------------------------------*/
@@ -161,7 +162,7 @@ void ZigBeeTask(void const * argument)
 	/* Infinite loop */
 	for(;;)
 	{
-		if (osOK == osSemaphoreWait(zigbeeSemaHandle, 100))
+		if (osOK == osSemaphoreWait(zigbeeSemaHandle, 10))
 		{
 			RadioTXPacket();
 		}
@@ -175,12 +176,14 @@ void ZigBeeTask(void const * argument)
 void GsmTask(void const * argument)
 {
   /* USER CODE BEGIN GsmTask */
-	/* Infinite loop */
+//	uint8_t beacon[5] = "Here\r";
+	uint8_t reqType = 0;
+	uint8_t pendingRsp = false;
 	GSM_Init();
 	if (GSM_HttpGet((uint8_t*)"217.26.174.207:350/saveip/") == GSM_HTTP_RESPONSE_OK){
-	            GSM_StartServerConnection(SERVER_HOST, SERVER_CONNECTION_PORT);
-	            HAL_TIM_Base_Start_IT(&htim6);
-	        }
+		GSM_StartServerConnection(SERVER_HOST, SERVER_CONNECTION_PORT);
+	}
+	/* Infinite loop */
 	for(;;)
 	{
 		switch (GSM_ListenToServerCommands())
@@ -189,30 +192,31 @@ void GsmTask(void const * argument)
 			HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
 			MRF24J40_ToSend((uint8_t*)"Start watering", 15);
 			osSemaphoreRelease(zigbeeSemaHandle);
-			if (osOK == osSemaphoreWait(gsmSemaHandle, 30000))
-			{
-				/**/
-			}
-			else
-			{
-				/*Send error to server*/
-			}
+			pendingRsp = true;
+			reqType = 1;
 			break;
 		case GSM_COMMAND_COLLECTING_DATA:
 			HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
 			MRF24J40_ToSend((uint8_t*)"Start collecting data", 22);
 			osSemaphoreRelease(zigbeeSemaHandle);
-			if (osOK == osSemaphoreWait(gsmSemaHandle, 30000))
-			{
-
-			}
-			else
-			{
-				/*Send error to server*/
-			}
+			pendingRsp = true;
+			reqType = 2;
 			break;
 		default:
 			break;
+		}
+		if ((pendingRsp == true)/* && (osOK == osSemaphoreWait(gsmSemaHandle, 0))*/)
+		{
+			if (reqType == 1)
+			{
+				GSM_TcpSend((uint8_t*)"Watering started", 16);
+				reqType = 0;
+			}
+			else if (reqType == 2)
+			{
+				GSM_TcpSend((uint8_t*)"Collecting started", 18);
+				reqType = 0;
+			}
 		}
 	}
   /* USER CODE END GsmTask */
@@ -286,15 +290,7 @@ void DisplayTask(void const * argument)
 }
 
 /* USER CODE BEGIN Application */
-void ServerBeaconTransmit(void)
-{
-	uint8_t beacon[5] = "Here\r";
-	if (enConnectOk == Get_eGPRSState())
-	{
-//		while (enCommBusy == Get_eGsmCommState());
-		GSM_TcpSend(beacon, 5);
-	}
-}
+
 /* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
