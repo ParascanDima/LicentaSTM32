@@ -1,5 +1,5 @@
 #MicroXplorer Configuration settings - do not modify
-FREERTOS.BinarySemaphores01=zigbeeSema,Dynamic,NULL;gsmSema,Dynamic,NULL
+FREERTOS.BinarySemaphores01=zigbeeTransmitSema,Dynamic,NULL;gsmSema,Dynamic,NULL;zigbeeReceiveSema,Dynamic,NULL
 FREERTOS.FootprintOK=true
 FREERTOS.IPParameters=Tasks01,FootprintOK,BinarySemaphores01
 FREERTOS.Tasks01=defaultTask,0,128,StartDefaultTask,Default,NULL,Dynamic,NULL,NULL;myTask02,0,128,ZigBeeTask,Default,NULL,Dynamic,NULL,NULL;myTask03,0,128,GsmTask,Default,NULL,Dynamic,NULL,NULL;myTask04,-3,128,DisplayTask,Default,NULL,Dynamic,NULL,NULL

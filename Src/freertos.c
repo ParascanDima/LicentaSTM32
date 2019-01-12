@@ -9,7 +9,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2018 STMicroelectronics International N.V. 
+  * Copyright (c) 2019 STMicroelectronics International N.V. 
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -64,11 +64,12 @@ osThreadId defaultTaskHandle;
 osThreadId myTask02Handle;
 osThreadId myTask03Handle;
 osThreadId myTask04Handle;
-osSemaphoreId zigbeeSemaHandle;
+osSemaphoreId zigbeeTransmitSemaHandle;
 osSemaphoreId gsmSemaHandle;
+osSemaphoreId zigbeeReceiveSemaHandle;
 
 /* USER CODE BEGIN Variables */
-
+bool enablePost = false;
 /* USER CODE END Variables */
 
 /* Function prototypes -------------------------------------------------------*/
@@ -80,7 +81,8 @@ void DisplayTask(void const * argument);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /* USER CODE BEGIN FunctionPrototypes */
-
+void ZigBee_ReceivedCallback(void);
+bool IsValidDataToPost(uint8_t* data);
 /* USER CODE END FunctionPrototypes */
 
 /* Hook prototypes */
@@ -97,13 +99,17 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
-  /* definition and creation of zigbeeSema */
-  osSemaphoreDef(zigbeeSema);
-  zigbeeSemaHandle = osSemaphoreCreate(osSemaphore(zigbeeSema), 1);
+  /* definition and creation of zigbeeTransmitSema */
+  osSemaphoreDef(zigbeeTransmitSema);
+  zigbeeTransmitSemaHandle = osSemaphoreCreate(osSemaphore(zigbeeTransmitSema), 1);
 
   /* definition and creation of gsmSema */
   osSemaphoreDef(gsmSema);
   gsmSemaHandle = osSemaphoreCreate(osSemaphore(gsmSema), 1);
+
+  /* definition and creation of zigbeeReceiveSema */
+  osSemaphoreDef(zigbeeReceiveSema);
+  zigbeeReceiveSemaHandle = osSemaphoreCreate(osSemaphore(zigbeeReceiveSema), 1);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 	/* add semaphores, ... */
@@ -159,15 +165,18 @@ void ZigBeeTask(void const * argument)
   /* USER CODE BEGIN ZigBeeTask */
 	RadioInit();
 	RadioInitP2P();
+	MRF24J40_InstallCallback(RECEIVE_CALLBACK, ZigBee_ReceivedCallback);
 	/* Infinite loop */
 	for(;;)
 	{
-		if (osOK == osSemaphoreWait(zigbeeSemaHandle, 10))
+		if (osOK == osSemaphoreWait(zigbeeTransmitSemaHandle, 0))
 		{
 			RadioTXPacket();
 		}
-		HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
-		osDelay(500);
+		if (osOK == osSemaphoreWait(zigbeeReceiveSemaHandle, 0))
+		{
+			enablePost = 1;
+		}
 	}
   /* USER CODE END ZigBeeTask */
 }
@@ -176,7 +185,7 @@ void ZigBeeTask(void const * argument)
 void GsmTask(void const * argument)
 {
   /* USER CODE BEGIN GsmTask */
-//	uint8_t beacon[5] = "Here\r";
+	uint8_t* collectedData;
 	uint8_t reqType = 0;
 	uint8_t pendingRsp = false;
 	GSM_Init();
@@ -190,21 +199,29 @@ void GsmTask(void const * argument)
 		{
 		case GSM_COMMAND_START_WATERING:
 			HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
-			MRF24J40_ToSend((uint8_t*)"Start watering", 15);
-			osSemaphoreRelease(zigbeeSemaHandle);
+			MRF24J40_ToSend((uint8_t*)"Start watering", 14);
+			osSemaphoreRelease(zigbeeTransmitSemaHandle);
 			pendingRsp = true;
 			reqType = 1;
+			break;
+		case GSM_COMMAND_STOP_WATERING:
+			HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
+			MRF24J40_ToSend((uint8_t*)"Stop watering", 13);
+			osSemaphoreRelease(zigbeeTransmitSemaHandle);
+			pendingRsp = true;
+			reqType = 2;
 			break;
 		case GSM_COMMAND_COLLECTING_DATA:
 			HAL_GPIO_TogglePin(RED_LED_GPIO_Port, RED_LED_Pin);
 			MRF24J40_ToSend((uint8_t*)"Start collecting data", 22);
-			osSemaphoreRelease(zigbeeSemaHandle);
+			osSemaphoreRelease(zigbeeTransmitSemaHandle);
 			pendingRsp = true;
-			reqType = 2;
+			reqType = 3;
 			break;
 		default:
 			break;
 		}
+
 		if ((pendingRsp == true)/* && (osOK == osSemaphoreWait(gsmSemaHandle, 0))*/)
 		{
 			if (reqType == 1)
@@ -214,8 +231,24 @@ void GsmTask(void const * argument)
 			}
 			else if (reqType == 2)
 			{
-				GSM_TcpSend((uint8_t*)"Collecting started", 18);
+				GSM_TcpSend((uint8_t*)"Watering stopped", 16);
 				reqType = 0;
+			}
+			else if (reqType == 3)
+			{
+				GSM_TcpSend((uint8_t*)"Collecting started", 18);
+				reqType = 4;
+			}
+			else if (reqType == 4 && enablePost == true)
+			{
+				collectedData = Rx.payload;
+				if (IsValidDataToPost(collectedData))
+				{
+					/* Received data by ZigBee already formated to send to server */
+					GSM_HttpPost("217.26.174.207:350/datatransfer/", collectedData);
+				}
+				reqType = 0;
+				enablePost = false;
 			}
 		}
 	}
@@ -290,7 +323,41 @@ void DisplayTask(void const * argument)
 }
 
 /* USER CODE BEGIN Application */
+void ZigBee_ReceivedCallback(void)
+{
+	osSemaphoreRelease(zigbeeReceiveSemaHandle);
+}
 
+
+bool IsValidDataToPost(uint8_t* data)
+{
+	uint8_t index;
+	bool isValid = false;
+	uint8_t dataLength = (uint8_t)strlen((const char*)data);
+
+	for (index = 0; index < dataLength; index++)
+	{
+		if ((data[index] == "{") && ((dataLength - index) > 2))
+		{
+			data = &data[index];
+			break;
+		}
+	}
+
+	if (index != dataLength)
+	{
+		for ( ; index < dataLength; index++)
+		{
+			if (data[index] == "}")
+			{
+				isValid = true;
+				break;
+			}
+		}
+	}
+
+	return isValid;
+}
 /* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

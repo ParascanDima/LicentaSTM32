@@ -107,7 +107,8 @@
 
 #define START_UP              (0x01)   // Considering the start up as first reset
 
-
+#define TRANSMIT_CALLBACK     (0x01)
+#define RECEIVE_CALLBACK      (0x02)
 // converts x to a uint8_t* for bytewise access a.k.a. x[foo]
 #define BYTEPTR(x)              ((uint8_t*)&(x))
 
@@ -151,6 +152,9 @@ typedef struct                                  // radio state
     uint8_t volatile    RXPacketCount;                      // number of buffers waiting to be read (modified by ISR)
     uint8_t             IEEESeqNum;                         // tx packet sequence number (initial value not important)
     uint8_t             Channel;                            // current radio channel
+
+    void               (*ReceiveCallback)(void);
+    void               (*TransmitCallback)(void);
 } MRF24J40_STATUS;
 
 typedef uint8_t ZigBeeStateType;

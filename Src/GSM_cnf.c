@@ -56,6 +56,12 @@ uint8_t GSM_ListenToServerCommands(void){
             gsmResponseBufferReset();
             return tRsp;
         }
+        else if (gsmCompareMessageWith((uint8_t*)"Stop watering"))
+        {
+        	tRsp = GSM_COMMAND_STOP_WATERING;
+        	gsmResponseBufferReset();
+        	return tRsp;
+        }
         else{
             if(gsmCompareMessageWith((uint8_t*)"Start collecting data")){
                 tRsp = GSM_COMMAND_COLLECTING_DATA;

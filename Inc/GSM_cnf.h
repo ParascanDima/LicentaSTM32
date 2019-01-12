@@ -20,7 +20,8 @@
 #define SERVER_CONNECTION_PORT  (uint8_t*)"351"
 
 #define GSM_COMMAND_START_WATERING                                 0x01
-#define GSM_COMMAND_COLLECTING_DATA                                0x02
+#define GSM_COMMAND_STOP_WATERING                                  0x02
+#define GSM_COMMAND_COLLECTING_DATA                                0x03
 
 /***************************Public Type Definitions********************************/
 

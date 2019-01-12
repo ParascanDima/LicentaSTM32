@@ -754,6 +754,11 @@ void MRF24J40_EventHandler(void) {
 
         lowWrite(RXFLUSH, RXFLUSH_BIT); // flush RX hw FIFO manually (workaround for silicon errata #1)
         lowWrite(BBREG1, CLEAR_REGISTER); // reset RXDECINV to enable radio to receive next packet
+
+        if (RadioStatus.ReceiveCallback != NULL)
+        {
+        	RadioStatus.ReceiveCallback();
+        }
     }
 
     if (iflags.bits.TXIFG) // TX int?  If so, this means TX is no longer busy, and the result (if any) of the ACK request is in
@@ -769,6 +774,12 @@ void MRF24J40_EventHandler(void) {
 
             RadioStatus.TX_PENDING_ACK = 0; // TX finished, clear that I am pending an ACK, already got it (if I was gonna get it)
             RadioStatus.LastTXTriggerTick = MRF24J40IF_GetSysMilliseconds(); // record time (used to check for locked-up radio or PLL loss)
+
+        }
+
+        if (RadioStatus.TransmitCallback != NULL)
+        {
+        	RadioStatus.TransmitCallback();
         }
     }
 
@@ -793,6 +804,19 @@ void RadioInitP2P(void) {
     Tx.dstPANID = RadioStatus.MyPANID;
     Tx.dstAddr = MY_SHORT_ADDRESS;
     //Tx.srcAddrMode = SHORT_ADDR_FIELD;
+}
+
+
+void MRF24J40_InstallCallback(uint8_t callbackType, void (*func)(void))
+{
+	if (RECEIVE_CALLBACK == callbackType)
+	{
+		RadioStatus.ReceiveCallback = func;
+	}
+	else if (TRANSMIT_CALLBACK == callbackType)
+	{
+		RadioStatus.TransmitCallback = func;
+	}
 }
 
 void RadioInitBeaconCoord(void)
